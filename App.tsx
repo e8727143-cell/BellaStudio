@@ -83,7 +83,7 @@ const App: React.FC = () => {
       
       {/* Visual Debug Indicator - Remove in production once stable */}
       <div className="bg-brand-green/20 text-brand-green text-xs font-mono text-center py-1">
-        v2.5 - Rotación Lista (No Config Requerida)
+        v2.6 - Rotación Total (Anti-Fallos)
       </div>
 
       <main className="flex-grow container mx-auto px-4 py-8 md:py-12 max-w-7xl">

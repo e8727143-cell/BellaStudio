@@ -91,8 +91,6 @@ const cropOutputToExactSize = (base64Str: string, targetWidth: number, targetHei
   });
 };
 
-// Función para mezclar el array aleatoriamente (Fisher-Yates shuffle)
-// Esto asegura que cada usuario empiece con una llave diferente, distribuyendo la carga.
 function shuffleArray(array: string[]) {
   const newArray = [...array];
   for (let i = newArray.length - 1; i > 0; i--) {
@@ -179,20 +177,16 @@ export const generateShoeMockup = async (
 
   // --- LOGICA DE ROTACIÓN DE KEYS ---
   
-  // 1. Mezclamos las llaves para intentar una distinta cada vez
   const rotatedKeys = shuffleArray(API_KEYS_POOL);
-  
-  // Añadimos la key de entorno (si existe) al final como respaldo último
   if (process.env.API_KEY && !API_KEYS_POOL.includes(process.env.API_KEY)) {
     rotatedKeys.push(process.env.API_KEY);
   }
 
   let lastError: any = null;
 
-  // 2. Iteramos sobre las llaves
   for (let i = 0; i < rotatedKeys.length; i++) {
     const currentKey = rotatedKeys[i];
-    console.log(`Intentando generación con Key #${i + 1} (termina en ...${currentKey.slice(-4)})`);
+    // console.log(`Intentando Key #${i + 1}/${rotatedKeys.length}`);
 
     try {
       const ai = new GoogleGenAI({ apiKey: currentKey });
@@ -203,12 +197,17 @@ export const generateShoeMockup = async (
         config: { imageConfig: { aspectRatio: apiAspectRatio } }
       });
 
+      // Validación extra para bloqueo de seguridad
+      if (response.promptFeedback?.blockReason) {
+         console.warn(`Key #${i+1} bloqueó el contenido por seguridad.`);
+         // Si es bloqueo de seguridad, NO es culpa de la key, pero intentamos otra por si acaso
+         // el filtro es menos estricto en otra región del servidor.
+         throw new Error(`Bloqueo: ${response.promptFeedback.blockReason}`);
+      }
+
       const outputParts = response.candidates?.[0]?.content?.parts;
       
       if (!outputParts || outputParts.length === 0) {
-        if (response.promptFeedback?.blockReason) {
-           throw new Error(`Bloqueo de seguridad: ${response.promptFeedback.blockReason}`);
-        }
         throw new Error("Generación vacía");
       }
 
@@ -223,26 +222,19 @@ export const generateShoeMockup = async (
       throw new Error("Sin imagen en la respuesta");
 
     } catch (error: any) {
-      console.warn(`Fallo con Key #${i + 1}:`, error.message);
+      console.warn(`Error en Key #${i + 1} (${currentKey.slice(-4)}):`, error.message);
       lastError = error;
 
-      // Si el error es 429 (Too Many Requests) o 503 (Service Unavailable), continuamos a la siguiente llave
-      if (
-        error.message?.includes('429') || 
-        error.message?.includes('503') || 
-        error.message?.includes('quota') ||
-        error.message?.includes('Too Many Requests')
-      ) {
-        console.log("-> Cambiando a la siguiente API Key...");
-        continue; // Pasa a la siguiente iteración del loop (siguiente llave)
-      } else {
-        // Si es otro error (ej. imagen inválida, prompt prohibido), no tiene sentido reintentar con otra key
-        throw error;
+      // MODIFICACIÓN CRÍTICA:
+      // Ya no filtramos por "429". Si falla, intentamos la siguiente SIEMPRE.
+      // Solo nos detenemos si es la última llave.
+      if (i < rotatedKeys.length - 1) {
+        continue;
       }
+      // Si era la última llave, el bucle terminará y lanzará el error final abajo.
     }
   }
 
-  // Si llegamos aquí, todas las keys fallaron
   console.error("Todas las API Keys han fallado.");
-  throw new Error("Sistema saturado: Todas las llaves de API están ocupadas en este momento. Por favor intenta en 1 minuto.");
+  throw new Error(`Sistema saturado tras ${rotatedKeys.length} intentos. Último error: ${lastError?.message || 'Desconocido'}`);
 };
