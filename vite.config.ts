@@ -3,14 +3,27 @@ import react from '@vitejs/plugin-react'
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
-  // Carga variables de entorno para uso en build, si es necesario
+  // Carga todas las variables de entorno
   const env = loadEnv(mode, (process as any).cwd(), '');
   
   return {
     plugins: [react()],
     define: {
-      // Passthrough seguro para variables críticas si no usan el prefijo VITE_
-      'process.env.API_KEY': JSON.stringify(env.API_KEY || env.VITE_API_KEY),
+      // Priorizamos VITE_API_KEY pero aceptamos API_KEY como respaldo
+      'process.env.API_KEY': JSON.stringify(env.VITE_API_KEY || env.API_KEY),
+      'process.env.VITE_SUPABASE_URL': JSON.stringify(env.VITE_SUPABASE_URL),
+      'process.env.VITE_SUPABASE_ANON_KEY': JSON.stringify(env.VITE_SUPABASE_ANON_KEY)
+    },
+    build: {
+      // Aumentamos el límite de aviso de chunk para evitar warnings en Vercel
+      chunkSizeWarningLimit: 2000,
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            vendor: ['react', 'react-dom', '@google/genai']
+          }
+        }
+      }
     }
   }
 })

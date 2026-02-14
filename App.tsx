@@ -9,27 +9,16 @@ import { generateShoeMockup } from './services/geminiService';
 import { AppStatus } from './types';
 
 const App: React.FC = () => {
-  // Theme State - Default to Dark Mode (true)
   const [isDarkMode, setIsDarkMode] = useState<boolean>(true);
-  
   const [status, setStatus] = useState<AppStatus>(AppStatus.IDLE);
-  
-  // Settings State - Default to 4:5 as requested
   const [aspectRatio, setAspectRatio] = useState<string>("4:5");
-
-  // Product (Shoe) State
   const [sourceFile, setSourceFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  
-  // Template (Background) State
   const [templateFile, setTemplateFile] = useState<File | null>(null);
   const [templatePreviewUrl, setTemplatePreviewUrl] = useState<string | null>(null);
-
-  // Result State
   const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // Apply Dark Mode class to HTML tag
   useEffect(() => {
     const html = document.documentElement;
     if (isDarkMode) {
@@ -80,19 +69,13 @@ const App: React.FC = () => {
       setGeneratedImageUrl(resultUrl);
       setStatus(AppStatus.SUCCESS);
     } catch (error: any) {
-      console.error("Error completo:", error);
+      console.error("Error completo capturado en App:", error);
       setStatus(AppStatus.ERROR);
       
-      // MOSTRAR EL ERROR REAL DEL SERVIDOR/API
-      // Esto es crucial para saber si es 403, 500, Quota, etc.
-      const message = error.message || error.toString();
+      const message = error.message || "Error desconocido";
       
-      if (message.includes('API Key')) {
-        setErrorMsg('Falta configurar la VITE_API_KEY en Vercel.');
-      } else {
-        // Limpiamos un poco el mensaje si es muy técnico, pero lo dejamos visible
-        setErrorMsg(`Error de IA: ${message.slice(0, 100)}...`);
-      }
+      // ESTE MENSAJE ES NUEVO PARA CONFIRMAR QUE SE HA ACTUALIZADO LA APP
+      setErrorMsg(`Sistema: ${message}`);
     }
   };
 
@@ -103,24 +86,18 @@ const App: React.FC = () => {
       <main className="flex-grow container mx-auto px-4 py-8 md:py-12 max-w-7xl">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           
-          {/* Left Column: Input (Span 5) */}
+          {/* Left Column: Input */}
           <div className="lg:col-span-5 flex flex-col gap-6">
-            
-            {/* Step 1: Stage Configuration */}
             <StageSelector 
               onTemplateSelected={handleTemplateSelected}
               currentTemplate={templatePreviewUrl}
               onFormatChange={setAspectRatio}
             />
-
-            {/* Step 2: Format Selection */}
             <AspectRatioSelector 
               value={aspectRatio}
               onChange={setAspectRatio}
               disabled={status === AppStatus.PROCESSING}
             />
-
-            {/* Step 3: Product Upload */}
             <ImageUploader 
               onImageSelected={handleImageSelected} 
               selectedImage={previewUrl}
@@ -147,9 +124,12 @@ const App: React.FC = () => {
                   </div>
                   
                   {errorMsg && (
-                    <div className="bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 p-4 rounded-xl text-sm border border-red-100 dark:border-red-800 flex items-start gap-2 break-words">
-                      <svg className="w-5 h-5 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                      <span>{errorMsg}</span>
+                    <div className="bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 p-4 rounded-xl text-sm border border-red-100 dark:border-red-800 flex items-start gap-3 shadow-sm">
+                      <svg className="w-5 h-5 shrink-0 mt-0.5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                      <div className="flex-1">
+                        <span className="font-bold block mb-1">Error Detectado:</span>
+                        <span className="opacity-90">{errorMsg}</span>
+                      </div>
                     </div>
                   )}
 
@@ -165,7 +145,7 @@ const App: React.FC = () => {
             )}
           </div>
 
-          {/* Right Column: Output / Placeholder (Span 7) */}
+          {/* Right Column: Output */}
           <div className="lg:col-span-7 flex flex-col h-full min-h-[600px]">
              {status === AppStatus.SUCCESS && generatedImageUrl ? (
                 <MockupResult 
@@ -179,10 +159,7 @@ const App: React.FC = () => {
                     ? 'bg-gray-50 dark:bg-brand-card/50 border-brand-green/30' 
                     : 'bg-white dark:bg-brand-card border-gray-200 dark:border-gray-700'}
                 `}>
-                  
-                  {/* Background decoration */}
                   <div className="absolute inset-0 opacity-[0.03] dark:opacity-[0.05] pointer-events-none bg-[url('https://www.transparenttextures.com/patterns/leaves.png')] dark:invert"></div>
-
                   {status === AppStatus.PROCESSING ? (
                     <div className="z-10 flex flex-col items-center animate-pulse">
                        <div className="w-24 h-24 rounded-full border-4 border-brand-green border-t-brand-accent animate-spin mb-8"></div>
@@ -209,10 +186,8 @@ const App: React.FC = () => {
                 </div>
              )}
           </div>
-
         </div>
       </main>
-
       <footer className="bg-white dark:bg-brand-card py-8 border-t border-gray-100 dark:border-gray-800 mt-auto transition-colors duration-300">
         <div className="container mx-auto px-4 text-center">
            <p className="text-gray-400 text-sm font-medium">

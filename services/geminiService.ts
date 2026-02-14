@@ -13,7 +13,6 @@ const fileToBase64 = (file: File): Promise<string> => {
   });
 };
 
-// Helper 1: Crop/Resize INPUT template to dimensions that match the API's native aspect ratio
 const processTemplateImage = (file: File, width: number, height: number): Promise<string> => {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -22,40 +21,30 @@ const processTemplateImage = (file: File, width: number, height: number): Promis
     img.onload = () => {
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
-      
       if (!ctx) {
         URL.revokeObjectURL(objectUrl);
         reject(new Error("Could not create canvas context"));
         return;
       }
-
       canvas.width = width;
       canvas.height = height;
-
-      // Calculate "object-fit: cover" logic
       const scale = Math.max(width / img.width, height / img.height);
       const x = (width / scale - img.width) / 2;
       const y = (height / scale - img.height) / 2;
-
       ctx.drawImage(img, x * scale, y * scale, img.width * scale, img.height * scale);
-
       const dataUrl = canvas.toDataURL(file.type);
       const base64 = dataUrl.split(',')[1];
-      
       URL.revokeObjectURL(objectUrl);
       resolve(base64);
     };
-
     img.onerror = () => {
       URL.revokeObjectURL(objectUrl);
       reject(new Error("Failed to load template image for processing"));
     };
-
     img.src = objectUrl;
   });
 };
 
-// Helper 2: Post-process the OUTPUT from AI to exact user dimensions
 const cropOutputToExactSize = (base64Str: string, targetWidth: number, targetHeight: number): Promise<string> => {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -63,15 +52,11 @@ const cropOutputToExactSize = (base64Str: string, targetWidth: number, targetHei
        const canvas = document.createElement('canvas');
        const ctx = canvas.getContext('2d');
        if (!ctx) { reject(new Error("No context")); return; }
-       
        canvas.width = targetWidth;
        canvas.height = targetHeight;
-       
        const sourceRatio = img.width / img.height;
        const targetRatio = targetWidth / targetHeight;
-       
        let sx = 0, sy = 0, sWidth = img.width, sHeight = img.height;
-       
        if (sourceRatio > targetRatio) {
           sWidth = img.height * targetRatio;
           sx = (img.width - sWidth) / 2;
@@ -79,7 +64,6 @@ const cropOutputToExactSize = (base64Str: string, targetWidth: number, targetHei
           sHeight = img.width / targetRatio;
           sy = (img.height - sHeight) / 2;
        }
-
        ctx.drawImage(img, sx, sy, sWidth, sHeight, 0, 0, targetWidth, targetHeight);
        resolve(canvas.toDataURL('image/png'));
     };
@@ -93,43 +77,37 @@ export const generateShoeMockup = async (
   templateFile: File | undefined,
   aspectRatioInput: string
 ): Promise<string> => {
-  // API Key must be obtained exclusively from process.env.API_KEY as per guidelines.
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  // CRITICAL CHECK: Ensure API Key exists
+  // We check process.env.API_KEY which is injected by Vite define
+  const apiKey = process.env.API_KEY;
+
+  if (!apiKey || apiKey.includes("undefined")) {
+    console.error("API Key is missing or invalid:", apiKey);
+    throw new Error("MISSING_API_KEY: Por favor agrega VITE_API_KEY en Vercel > Settings > Environment Variables.");
+  }
+
+  const ai = new GoogleGenAI({ apiKey: apiKey });
   const shoeBase64 = await fileToBase64(shoeFile);
 
-  // LOGIC CONFIGURATION
   let apiAspectRatio = "1:1";
   let inputWidth = 1080;
   let inputHeight = 1080;
-  
-  // Output targets
   let finalWidth = 1080;
   let finalHeight = 1080;
 
   if (aspectRatioInput === "1:1") {
     apiAspectRatio = "1:1";
-    inputWidth = 1080;
-    inputHeight = 1080;
-    finalWidth = 1080;
-    finalHeight = 1080;
-  } 
-  else if (aspectRatioInput === "9:16") {
+    inputWidth = 1080; inputHeight = 1080;
+    finalWidth = 1080; finalHeight = 1080;
+  } else if (aspectRatioInput === "9:16") {
     apiAspectRatio = "9:16";
-    inputWidth = 1080;
-    inputHeight = 1920;
-    finalWidth = 1080;
-    finalHeight = 1920;
-  }
-  else if (aspectRatioInput === "4:5") {
+    inputWidth = 1080; inputHeight = 1920;
+    finalWidth = 1080; finalHeight = 1920;
+  } else if (aspectRatioInput === "4:5") {
     apiAspectRatio = "3:4";
-    inputWidth = 1080;
-    inputHeight = 1440;
-    finalWidth = 1080;
-    finalHeight = 1350;
+    inputWidth = 1080; inputHeight = 1440;
+    finalWidth = 1080; finalHeight = 1350;
   }
-
-  let prompt = "";
-  let parts: any[] = [];
 
   const cleaningInstructions = `
     CRITICAL INSTRUCTION - BOX REMOVAL:
@@ -139,9 +117,11 @@ export const generateShoeMockup = async (
     3. The shoes must be placed DIRECTLY on the wooden table surface.
   `;
 
+  let parts: any[] = [];
+  let prompt = "";
+
   if (templateFile) {
     const processedTemplateBase64 = await processTemplateImage(templateFile, inputWidth, inputHeight);
-    
     prompt = `
       You are an expert digital compositor.
       INPUTS:
@@ -155,13 +135,11 @@ export const generateShoeMockup = async (
       2. Place the shoes centrally on the wooden surface.
       3. Create realistic shadows on the wood.
     `;
-
     parts = [
       { inlineData: { mimeType: "image/png", data: processedTemplateBase64 } },
       { inlineData: { mimeType: shoeFile.type, data: shoeBase64 } },
       { text: prompt }
     ];
-
   } else {
     prompt = `
       Create a high-end commercial footwear mockup.
@@ -171,7 +149,6 @@ export const generateShoeMockup = async (
       Behind them is a vertical garden wall with white roses and a beige circle sign saying "BELLA".
       Style: Photorealistic, studio lighting.
     `;
-
     parts = [
       { inlineData: { mimeType: shoeFile.type, data: shoeBase64 } },
       { text: prompt }
@@ -182,17 +159,18 @@ export const generateShoeMockup = async (
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash-image',
       contents: { parts },
-      config: {
-        imageConfig: {
-          aspectRatio: apiAspectRatio
-        }
-      }
+      config: { imageConfig: { aspectRatio: apiAspectRatio } }
     });
 
     const outputParts = response.candidates?.[0]?.content?.parts;
     
-    if (!outputParts) {
-      throw new Error("API returned no content. Check model availability.");
+    if (!outputParts || outputParts.length === 0) {
+      // Check for safety blocks or other non-throwing errors
+      console.warn("Respuesta completa:", response);
+      if (response.promptFeedback?.blockReason) {
+         throw new Error(`Contenido bloqueado por seguridad: ${response.promptFeedback.blockReason}`);
+      }
+      throw new Error("La IA no generó contenido. Puede que la imagen haya sido bloqueada o el modelo esté ocupado.");
     }
 
     for (const part of outputParts) {
@@ -200,15 +178,19 @@ export const generateShoeMockup = async (
         const rawBase64 = part.inlineData.data;
         const mimeType = part.inlineData.mimeType || 'image/png';
         const rawImageUrl = `data:${mimeType};base64,${rawBase64}`;
-        const finalImageUrl = await cropOutputToExactSize(rawImageUrl, finalWidth, finalHeight);
-        return finalImageUrl;
+        return await cropOutputToExactSize(rawImageUrl, finalWidth, finalHeight);
       }
     }
-
-    throw new Error("The AI generation succeeded but returned no image data.");
-
-  } catch (error) {
-    console.error("Gemini API Error:", error);
+    throw new Error("Respuesta recibida pero sin datos de imagen válidos.");
+  } catch (error: any) {
+    console.error("Gemini API Error Detail:", error);
+    // Mejora mensajes de error comunes
+    if (error.message && error.message.includes('403')) {
+      throw new Error("Error 403: API Key inválida o sin permisos. Verifica tu configuración en Vercel.");
+    }
+    if (error.message && error.message.includes('429')) {
+      throw new Error("Error 429: Cuota excedida. Has usado todas las peticiones gratuitas por hoy.");
+    }
     throw error;
   }
 };
