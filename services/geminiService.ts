@@ -14,7 +14,6 @@ const fileToBase64 = (file: File): Promise<string> => {
 };
 
 // Helper 1: Crop/Resize INPUT template to dimensions that match the API's native aspect ratio
-// This prevents the AI from distorting the image to fit its context window.
 const processTemplateImage = (file: File, width: number, height: number): Promise<string> => {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -68,19 +67,15 @@ const cropOutputToExactSize = (base64Str: string, targetWidth: number, targetHei
        canvas.width = targetWidth;
        canvas.height = targetHeight;
        
-       // Center crop logic
-       // The AI output might be larger (e.g., 3:4 is taller than 4:5), so we crop the top/bottom evenly.
        const sourceRatio = img.width / img.height;
        const targetRatio = targetWidth / targetHeight;
        
        let sx = 0, sy = 0, sWidth = img.width, sHeight = img.height;
        
        if (sourceRatio > targetRatio) {
-          // Source is wider than target: Crop width
           sWidth = img.height * targetRatio;
           sx = (img.width - sWidth) / 2;
        } else {
-          // Source is taller than target (common for 3:4 -> 4:5): Crop height
           sHeight = img.width / targetRatio;
           sy = (img.height - sHeight) / 2;
        }
@@ -98,16 +93,8 @@ export const generateShoeMockup = async (
   templateFile: File | undefined,
   aspectRatioInput: string
 ): Promise<string> => {
-  // Robustly check for API Key in standard process.env (injected by Vite define) 
-  // OR native Vite import.meta.env
-  const apiKey = process.env.API_KEY || (import.meta as any).env?.VITE_API_KEY;
-
-  if (!apiKey) {
-    console.error("Config Check Failed: API_KEY is missing in env variables.");
-    throw new Error("API Key is missing. Please check your configuration.");
-  }
-
-  const ai = new GoogleGenAI({ apiKey: apiKey });
+  // API Key must be obtained exclusively from process.env.API_KEY as per guidelines.
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const shoeBase64 = await fileToBase64(shoeFile);
 
   // LOGIC CONFIGURATION
@@ -134,15 +121,11 @@ export const generateShoeMockup = async (
     finalHeight = 1920;
   }
   else if (aspectRatioInput === "4:5") {
-    // SPECIAL HANDLING FOR 4:5
-    // API does not support 4:5. Closest native is 3:4.
-    // To prevent distortion, we feed the AI a 3:4 image (1080x1440).
-    // Then we crop the result back to 4:5 (1080x1350).
     apiAspectRatio = "3:4";
     inputWidth = 1080;
-    inputHeight = 1440; // 3:4 ratio to satisfy API native format
+    inputHeight = 1440;
     finalWidth = 1080;
-    finalHeight = 1350; // Requested 4:5 ratio
+    finalHeight = 1350;
   }
 
   let prompt = "";
@@ -157,21 +140,16 @@ export const generateShoeMockup = async (
   `;
 
   if (templateFile) {
-    // Step 1: Crop Input to API Friendly Size (prevents distortion)
     const processedTemplateBase64 = await processTemplateImage(templateFile, inputWidth, inputHeight);
     
     prompt = `
       You are an expert digital compositor.
-      
       INPUTS:
       - Image 1: Background Stage (Fixed).
       - Image 2: Product (Shoes).
-
       TASK:
       Composite the shoes from Image 2 onto the table in Image 1.
-
       ${cleaningInstructions}
-
       STRICT VISUAL RULES:
       1. Use Image 1 EXACTLY as provided. Do not stretch or warp the background.
       2. Place the shoes centrally on the wooden surface.
@@ -185,11 +163,9 @@ export const generateShoeMockup = async (
     ];
 
   } else {
-    // Generation Fallback
     prompt = `
       Create a high-end commercial footwear mockup.
       ${cleaningInstructions}
-      
       Scene:
       The shoes are sitting on a polished wooden round table.
       Behind them is a vertical garden wall with white roses and a beige circle sign saying "BELLA".
@@ -216,7 +192,7 @@ export const generateShoeMockup = async (
     const outputParts = response.candidates?.[0]?.content?.parts;
     
     if (!outputParts) {
-      throw new Error("No content generated.");
+      throw new Error("API returned no content. Check model availability.");
     }
 
     for (const part of outputParts) {
@@ -224,16 +200,12 @@ export const generateShoeMockup = async (
         const rawBase64 = part.inlineData.data;
         const mimeType = part.inlineData.mimeType || 'image/png';
         const rawImageUrl = `data:${mimeType};base64,${rawBase64}`;
-
-        // Step 2: Post-process Output to Exact User Dimensions
-        // This handles the 3:4 -> 4:5 crop or ensures exact pixel dimensions for 1:1 and 9:16
         const finalImageUrl = await cropOutputToExactSize(rawImageUrl, finalWidth, finalHeight);
-        
         return finalImageUrl;
       }
     }
 
-    throw new Error("No image data found in the response.");
+    throw new Error("The AI generation succeeded but returned no image data.");
 
   } catch (error) {
     console.error("Gemini API Error:", error);

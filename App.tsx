@@ -80,12 +80,18 @@ const App: React.FC = () => {
       setGeneratedImageUrl(resultUrl);
       setStatus(AppStatus.SUCCESS);
     } catch (error: any) {
-      console.error(error);
+      console.error("Error completo:", error);
       setStatus(AppStatus.ERROR);
-      if (error.message?.includes('API Key')) {
-        setErrorMsg('Falta la API Key. Por favor configura el entorno.');
+      
+      // MOSTRAR EL ERROR REAL DEL SERVIDOR/API
+      // Esto es crucial para saber si es 403, 500, Quota, etc.
+      const message = error.message || error.toString();
+      
+      if (message.includes('API Key')) {
+        setErrorMsg('Falta configurar la VITE_API_KEY en Vercel.');
       } else {
-        setErrorMsg('Error al procesar. Asegúrate de que el calzado sea visible e inténtalo de nuevo.');
+        // Limpiamos un poco el mensaje si es muy técnico, pero lo dejamos visible
+        setErrorMsg(`Error de IA: ${message.slice(0, 100)}...`);
       }
     }
   };
@@ -141,9 +147,9 @@ const App: React.FC = () => {
                   </div>
                   
                   {errorMsg && (
-                    <div className="bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 p-4 rounded-xl text-sm border border-red-100 dark:border-red-800 flex items-center gap-2">
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                      {errorMsg}
+                    <div className="bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 p-4 rounded-xl text-sm border border-red-100 dark:border-red-800 flex items-start gap-2 break-words">
+                      <svg className="w-5 h-5 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                      <span>{errorMsg}</span>
                     </div>
                   )}
 
