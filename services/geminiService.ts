@@ -1,5 +1,24 @@
 import { GoogleGenAI } from "@google/genai";
 
+// --- POOL DE API KEYS ---
+// Lista de llaves para rotación y balanceo de carga
+const API_KEYS_POOL = [
+  "AIzaSyCIQA8vnqtaEtJaU877F3K_I5r4VQQT0hQ",
+  "AIzaSyAhed6gKBHYpzPSXJg9uNqELSrUZrhyo7c",
+  "AIzaSyAZzkR1RwIThgXJBfqpSR1oI6IKwtSqQa0",
+  "AIzaSyDP1J8ZRcSy99ezrUDEtG9rOvlIYOHQVXM",
+  "AIzaSyCyj2mOnjnixihLHIeVcrvXdcWGv2gfoL4",
+  "AIzaSyApH6Ta6sAlwFEz4y4U1iEjXWNvfr8vmS0",
+  "AIzaSyA4tKuXBKuhQVdQvuyyTEmwDEKOmrR3SuE",
+  "AIzaSyD6xpHI18xAbrVIThJlx5S0iznqNkyFtZs",
+  "AIzaSyDxh8apC2zykOvsJtBQKtGXbCQ__-ZCjm4",
+  "AIzaSyCNuLcOpIIE259j__bGdagY9DKa1pU_uiU",
+  "AIzaSyBE3eXTJRkEqxja--Au9ctlt1jZ7uLlmbU",
+  "AIzaSyDKvo2bjPwv_3l6dR5UQXQvfvrBh-5tpp8",
+  "AIzaSyAFE-ydwIHSgc1qM4fGkUnpr1bwPFxKcbQ",
+  "AIzaSyDrsw_XAbXl-ay7olCUwYmCy0O0uDcsBD8"
+];
+
 const fileToBase64 = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -72,23 +91,26 @@ const cropOutputToExactSize = (base64Str: string, targetWidth: number, targetHei
   });
 };
 
+// Función para mezclar el array aleatoriamente (Fisher-Yates shuffle)
+// Esto asegura que cada usuario empiece con una llave diferente, distribuyendo la carga.
+function shuffleArray(array: string[]) {
+  const newArray = [...array];
+  for (let i = newArray.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
+  }
+  return newArray;
+}
+
 export const generateShoeMockup = async (
   shoeFile: File, 
   templateFile: File | undefined,
   aspectRatioInput: string
 ): Promise<string> => {
-  // CRITICAL CHECK: Ensure API Key exists
-  // We check process.env.API_KEY which is injected by Vite define
-  const apiKey = process.env.API_KEY;
-
-  if (!apiKey || apiKey.includes("undefined")) {
-    console.error("API Key is missing or invalid:", apiKey);
-    throw new Error("MISSING_API_KEY: Por favor agrega VITE_API_KEY en Vercel > Settings > Environment Variables.");
-  }
-
-  const ai = new GoogleGenAI({ apiKey: apiKey });
+  
   const shoeBase64 = await fileToBase64(shoeFile);
 
+  // Configuración de dimensiones
   let apiAspectRatio = "1:1";
   let inputWidth = 1080;
   let inputHeight = 1080;
@@ -155,42 +177,72 @@ export const generateShoeMockup = async (
     ];
   }
 
-  try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash-image',
-      contents: { parts },
-      config: { imageConfig: { aspectRatio: apiAspectRatio } }
-    });
-
-    const outputParts = response.candidates?.[0]?.content?.parts;
-    
-    if (!outputParts || outputParts.length === 0) {
-      // Check for safety blocks or other non-throwing errors
-      console.warn("Respuesta completa:", response);
-      if (response.promptFeedback?.blockReason) {
-         throw new Error(`Contenido bloqueado por seguridad: ${response.promptFeedback.blockReason}`);
-      }
-      throw new Error("La IA no generó contenido. Puede que la imagen haya sido bloqueada o el modelo esté ocupado.");
-    }
-
-    for (const part of outputParts) {
-      if (part.inlineData && part.inlineData.data) {
-        const rawBase64 = part.inlineData.data;
-        const mimeType = part.inlineData.mimeType || 'image/png';
-        const rawImageUrl = `data:${mimeType};base64,${rawBase64}`;
-        return await cropOutputToExactSize(rawImageUrl, finalWidth, finalHeight);
-      }
-    }
-    throw new Error("Respuesta recibida pero sin datos de imagen válidos.");
-  } catch (error: any) {
-    console.error("Gemini API Error Detail:", error);
-    // Mejora mensajes de error comunes
-    if (error.message && error.message.includes('403')) {
-      throw new Error("Error 403: API Key inválida o sin permisos. Verifica tu configuración en Vercel.");
-    }
-    if (error.message && error.message.includes('429')) {
-      throw new Error("Error 429: Cuota excedida. Has usado todas las peticiones gratuitas por hoy.");
-    }
-    throw error;
+  // --- LOGICA DE ROTACIÓN DE KEYS ---
+  
+  // 1. Mezclamos las llaves para intentar una distinta cada vez
+  const rotatedKeys = shuffleArray(API_KEYS_POOL);
+  
+  // Añadimos la key de entorno (si existe) al final como respaldo último
+  if (process.env.API_KEY && !API_KEYS_POOL.includes(process.env.API_KEY)) {
+    rotatedKeys.push(process.env.API_KEY);
   }
+
+  let lastError: any = null;
+
+  // 2. Iteramos sobre las llaves
+  for (let i = 0; i < rotatedKeys.length; i++) {
+    const currentKey = rotatedKeys[i];
+    console.log(`Intentando generación con Key #${i + 1} (termina en ...${currentKey.slice(-4)})`);
+
+    try {
+      const ai = new GoogleGenAI({ apiKey: currentKey });
+      
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash-image',
+        contents: { parts },
+        config: { imageConfig: { aspectRatio: apiAspectRatio } }
+      });
+
+      const outputParts = response.candidates?.[0]?.content?.parts;
+      
+      if (!outputParts || outputParts.length === 0) {
+        if (response.promptFeedback?.blockReason) {
+           throw new Error(`Bloqueo de seguridad: ${response.promptFeedback.blockReason}`);
+        }
+        throw new Error("Generación vacía");
+      }
+
+      for (const part of outputParts) {
+        if (part.inlineData && part.inlineData.data) {
+          const rawBase64 = part.inlineData.data;
+          const mimeType = part.inlineData.mimeType || 'image/png';
+          const rawImageUrl = `data:${mimeType};base64,${rawBase64}`;
+          return await cropOutputToExactSize(rawImageUrl, finalWidth, finalHeight);
+        }
+      }
+      throw new Error("Sin imagen en la respuesta");
+
+    } catch (error: any) {
+      console.warn(`Fallo con Key #${i + 1}:`, error.message);
+      lastError = error;
+
+      // Si el error es 429 (Too Many Requests) o 503 (Service Unavailable), continuamos a la siguiente llave
+      if (
+        error.message?.includes('429') || 
+        error.message?.includes('503') || 
+        error.message?.includes('quota') ||
+        error.message?.includes('Too Many Requests')
+      ) {
+        console.log("-> Cambiando a la siguiente API Key...");
+        continue; // Pasa a la siguiente iteración del loop (siguiente llave)
+      } else {
+        // Si es otro error (ej. imagen inválida, prompt prohibido), no tiene sentido reintentar con otra key
+        throw error;
+      }
+    }
+  }
+
+  // Si llegamos aquí, todas las keys fallaron
+  console.error("Todas las API Keys han fallado.");
+  throw new Error("Sistema saturado: Todas las llaves de API están ocupadas en este momento. Por favor intenta en 1 minuto.");
 };
