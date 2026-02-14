@@ -98,11 +98,16 @@ export const generateShoeMockup = async (
   templateFile: File | undefined,
   aspectRatioInput: string
 ): Promise<string> => {
-  if (!process.env.API_KEY) {
+  // Robustly check for API Key in standard process.env (injected by Vite define) 
+  // OR native Vite import.meta.env
+  const apiKey = process.env.API_KEY || (import.meta as any).env?.VITE_API_KEY;
+
+  if (!apiKey) {
+    console.error("Config Check Failed: API_KEY is missing in env variables.");
     throw new Error("API Key is missing. Please check your configuration.");
   }
 
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const ai = new GoogleGenAI({ apiKey: apiKey });
   const shoeBase64 = await fileToBase64(shoeFile);
 
   // LOGIC CONFIGURATION
