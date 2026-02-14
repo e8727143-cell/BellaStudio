@@ -102,7 +102,7 @@ const App: React.FC = () => {
         onClick={() => { setShowDiagnostics(!showDiagnostics); if(!showDiagnostics && keyStatuses.length === 0) runDiagnostics(); }}
         className="bg-brand-green/20 text-brand-green text-xs font-mono text-center py-1 w-full hover:bg-brand-green/30 cursor-pointer transition-colors"
       >
-        v2.7 - Sistema de Diagnóstico (Click para ver estado)
+        v2.8 - Diagnóstico Secuencial (Más seguro)
       </button>
 
       {/* DIAGNOSTIC PANEL */}
@@ -114,7 +114,7 @@ const App: React.FC = () => {
                {isCheckingKeys ? 'Testeando...' : 'Re-Escanear'}
              </button>
           </div>
-          {isCheckingKeys && keyStatuses.length === 0 && <div className="animate-pulse">Testeando conectividad...</div>}
+          {isCheckingKeys && keyStatuses.length === 0 && <div className="animate-pulse">Testeando conectividad (una por una)...</div>}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
             {keyStatuses.map((k, i) => (
               <div key={i} className={`p-2 border rounded flex items-center justify-between ${k.status === 'ok' ? 'border-green-800 bg-green-900/20' : 'border-red-800 bg-red-900/20'}`}>
@@ -133,7 +133,7 @@ const App: React.FC = () => {
             ))}
           </div>
           <div className="mt-4 text-[10px] text-gray-500">
-            * Si todas fallan con "CUOTA EXCEDIDA", es probable que las llaves pertenezcan al mismo Proyecto de Google Cloud.
+            * Nota: Si fallan, intenta mañana. El límite gratuito es diario (Pacific Time).
           </div>
         </div>
       )}

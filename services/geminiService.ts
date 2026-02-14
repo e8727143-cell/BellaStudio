@@ -36,35 +36,44 @@ export const checkAllKeys = async (): Promise<KeyStatus[]> => {
     allKeys.push(process.env.API_KEY);
   }
 
-  // Probamos todas en paralelo (con cuidado de no saturar el navegador)
-  const checks = allKeys.map(async (key) => {
+  // MODIFICACIÓN: Ejecución SECUENCIAL (uno por uno)
+  // Lanzar 14 peticiones simultáneas dispara los filtros anti-abuso de Google por IP.
+  for (const key of allKeys) {
     const start = Date.now();
     try {
       const ai = new GoogleGenAI({ apiKey: key });
-      // Hacemos una petición SUPER ligera (solo texto) para validar la cuenta
-      // Usamos flash-lite o flash normal para texto, consume menos cuota que imagen
+      // Usamos el modelo más básico y estable para el ping
       await ai.models.generateContent({
-        model: 'gemini-2.5-flash-lite-latest', 
+        model: 'gemini-2.5-flash-latest', 
         contents: { parts: [{ text: 'ping' }] }
       });
       
-      return {
+      results.push({
         key: key,
         status: 'ok',
         latency: Date.now() - start
-      } as KeyStatus;
+      });
 
     } catch (error: any) {
-      return {
+      const errorMsg = error.message || '';
+      let statusMsg = 'ERROR GENÉRICO';
+      
+      if (errorMsg.includes('429')) statusMsg = 'CUOTA EXCEDIDA';
+      if (errorMsg.includes('fetch')) statusMsg = 'ERROR RED';
+      if (errorMsg.includes('API key not valid')) statusMsg = 'KEY INVÁLIDA';
+
+      results.push({
         key: key,
         status: 'error',
         latency: Date.now() - start,
-        message: error.message?.includes('429') ? 'CUOTA EXCEDIDA' : 'ERROR GENÉRICO'
-      } as KeyStatus;
+        message: statusMsg
+      });
     }
-  });
+    // Pequeña pausa de 200ms entre chequeos para ser amable con la API
+    await new Promise(resolve => setTimeout(resolve, 200));
+  }
 
-  return Promise.all(checks);
+  return results;
 };
 
 const fileToBase64 = (file: File): Promise<string> => {
@@ -234,8 +243,7 @@ export const generateShoeMockup = async (
 
   for (let i = 0; i < rotatedKeys.length; i++) {
     const currentKey = rotatedKeys[i];
-    // console.log(`Intentando Key #${i + 1}/${rotatedKeys.length}`);
-
+    
     try {
       const ai = new GoogleGenAI({ apiKey: currentKey });
       
@@ -271,6 +279,8 @@ export const generateShoeMockup = async (
       lastError = error;
 
       if (i < rotatedKeys.length - 1) {
+        // Pausa de 1 segundo antes de intentar la siguiente llave para evitar "Rate Limit" por velocidad
+        await new Promise(resolve => setTimeout(resolve, 1000));
         continue;
       }
     }
