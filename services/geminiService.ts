@@ -19,6 +19,54 @@ const API_KEYS_POOL = [
   "AIzaSyDrsw_XAbXl-ay7olCUwYmCy0O0uDcsBD8"
 ];
 
+// --- DIAGNOSTICO ---
+export interface KeyStatus {
+  key: string;
+  status: 'ok' | 'error';
+  latency: number;
+  message?: string;
+}
+
+export const checkAllKeys = async (): Promise<KeyStatus[]> => {
+  const results: KeyStatus[] = [];
+  
+  // Incluimos la key de entorno si existe
+  const allKeys = [...API_KEYS_POOL];
+  if (process.env.API_KEY && !API_KEYS_POOL.includes(process.env.API_KEY)) {
+    allKeys.push(process.env.API_KEY);
+  }
+
+  // Probamos todas en paralelo (con cuidado de no saturar el navegador)
+  const checks = allKeys.map(async (key) => {
+    const start = Date.now();
+    try {
+      const ai = new GoogleGenAI({ apiKey: key });
+      // Hacemos una petición SUPER ligera (solo texto) para validar la cuenta
+      // Usamos flash-lite o flash normal para texto, consume menos cuota que imagen
+      await ai.models.generateContent({
+        model: 'gemini-2.5-flash-lite-latest', 
+        contents: { parts: [{ text: 'ping' }] }
+      });
+      
+      return {
+        key: key,
+        status: 'ok',
+        latency: Date.now() - start
+      } as KeyStatus;
+
+    } catch (error: any) {
+      return {
+        key: key,
+        status: 'error',
+        latency: Date.now() - start,
+        message: error.message?.includes('429') ? 'CUOTA EXCEDIDA' : 'ERROR GENÉRICO'
+      } as KeyStatus;
+    }
+  });
+
+  return Promise.all(checks);
+};
+
 const fileToBase64 = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -197,11 +245,8 @@ export const generateShoeMockup = async (
         config: { imageConfig: { aspectRatio: apiAspectRatio } }
       });
 
-      // Validación extra para bloqueo de seguridad
       if (response.promptFeedback?.blockReason) {
          console.warn(`Key #${i+1} bloqueó el contenido por seguridad.`);
-         // Si es bloqueo de seguridad, NO es culpa de la key, pero intentamos otra por si acaso
-         // el filtro es menos estricto en otra región del servidor.
          throw new Error(`Bloqueo: ${response.promptFeedback.blockReason}`);
       }
 
@@ -225,13 +270,9 @@ export const generateShoeMockup = async (
       console.warn(`Error en Key #${i + 1} (${currentKey.slice(-4)}):`, error.message);
       lastError = error;
 
-      // MODIFICACIÓN CRÍTICA:
-      // Ya no filtramos por "429". Si falla, intentamos la siguiente SIEMPRE.
-      // Solo nos detenemos si es la última llave.
       if (i < rotatedKeys.length - 1) {
         continue;
       }
-      // Si era la última llave, el bucle terminará y lanzará el error final abajo.
     }
   }
 
