@@ -73,9 +73,7 @@ const App: React.FC = () => {
       setStatus(AppStatus.ERROR);
       
       const message = error.message || "Error desconocido";
-      
-      // ESTE MENSAJE ES NUEVO PARA CONFIRMAR QUE SE HA ACTUALIZADO LA APP
-      setErrorMsg(`Sistema: ${message}`);
+      setErrorMsg(message);
     }
   };
 
@@ -83,6 +81,11 @@ const App: React.FC = () => {
     <div className={`min-h-screen flex flex-col font-sans transition-colors duration-300 ${isDarkMode ? 'bg-brand-dark text-white' : 'bg-[#FAFAFA] text-gray-900'}`}>
       <Header isDarkMode={isDarkMode} toggleTheme={toggleTheme} />
       
+      {/* Visual Debug Indicator - Remove in production once stable */}
+      <div className="bg-brand-green/20 text-brand-green text-xs font-mono text-center py-1">
+        v2.2 - Build Exitosa (Check de API Key Activo)
+      </div>
+
       <main className="flex-grow container mx-auto px-4 py-8 md:py-12 max-w-7xl">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           
@@ -124,10 +127,10 @@ const App: React.FC = () => {
                   </div>
                   
                   {errorMsg && (
-                    <div className="bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 p-4 rounded-xl text-sm border border-red-100 dark:border-red-800 flex items-start gap-3 shadow-sm">
+                    <div className="bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 p-4 rounded-xl text-sm border border-red-100 dark:border-red-800 flex items-start gap-3 shadow-sm break-all">
                       <svg className="w-5 h-5 shrink-0 mt-0.5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
                       <div className="flex-1">
-                        <span className="font-bold block mb-1">Error Detectado:</span>
+                        <span className="font-bold block mb-1">Error del Sistema:</span>
                         <span className="opacity-90">{errorMsg}</span>
                       </div>
                     </div>
