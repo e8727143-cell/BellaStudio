@@ -83,7 +83,7 @@ const App: React.FC = () => {
       
       {/* Visual Debug Indicator - Remove in production once stable */}
       <div className="bg-brand-green/20 text-brand-green text-xs font-mono text-center py-1">
-        v2.2 - Build Exitosa (Check de API Key Activo)
+        v2.3 - Corrección NPM (Si ves esto, la app se actualizó)
       </div>
 
       <main className="flex-grow container mx-auto px-4 py-8 md:py-12 max-w-7xl">
