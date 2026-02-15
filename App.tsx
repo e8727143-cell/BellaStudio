@@ -102,38 +102,40 @@ const App: React.FC = () => {
         onClick={() => { setShowDiagnostics(!showDiagnostics); if(!showDiagnostics && keyStatuses.length === 0) runDiagnostics(); }}
         className="bg-brand-green/20 text-brand-green text-xs font-mono text-center py-1 w-full hover:bg-brand-green/30 cursor-pointer transition-colors"
       >
-        v2.8 - Diagnóstico Secuencial (Más seguro)
+        v3.3 - Modo Secuencial Estricto (1 Key Activa)
       </button>
 
       {/* DIAGNOSTIC PANEL */}
       {showDiagnostics && (
-        <div className="bg-gray-900 text-gray-300 p-4 font-mono text-xs border-b border-gray-700 max-h-60 overflow-y-auto">
+        <div className="bg-gray-900 text-gray-300 p-4 font-mono text-xs border-b border-gray-700 max-h-80 overflow-y-auto">
           <div className="flex justify-between items-center mb-4">
              <h3 className="text-white font-bold">ESTADO DE API KEYS ({keyStatuses.length})</h3>
              <button onClick={runDiagnostics} className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-500" disabled={isCheckingKeys}>
                {isCheckingKeys ? 'Testeando...' : 'Re-Escanear'}
              </button>
           </div>
-          {isCheckingKeys && keyStatuses.length === 0 && <div className="animate-pulse">Testeando conectividad (una por una)...</div>}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+          {isCheckingKeys && keyStatuses.length === 0 && <div className="animate-pulse text-yellow-500">Conectando con Google Cloud (una por una)... espera unos segundos.</div>}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-2">
             {keyStatuses.map((k, i) => (
               <div key={i} className={`p-2 border rounded flex items-center justify-between ${k.status === 'ok' ? 'border-green-800 bg-green-900/20' : 'border-red-800 bg-red-900/20'}`}>
-                <div>
-                  <span className="opacity-50">...{k.key.slice(-4)}</span>
+                <div className="flex flex-col overflow-hidden mr-2">
+                  <span className="opacity-50 truncate">Key #{i+1} (...{k.key.slice(-4)})</span>
+                  {k.status !== 'ok' && <span className="text-[10px] text-red-300 font-bold">{k.message}</span>}
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 shrink-0">
                    <span>{k.latency}ms</span>
                    {k.status === 'ok' ? (
                      <span className="text-green-500 font-bold">OK</span>
                    ) : (
-                     <span className="text-red-500 font-bold" title={k.message}>FAIL</span>
+                     <span className="text-red-500 font-bold">FAIL</span>
                    )}
                 </div>
               </div>
             ))}
           </div>
-          <div className="mt-4 text-[10px] text-gray-500">
-            * Nota: Si fallan, intenta mañana. El límite gratuito es diario (Pacific Time).
+          <div className="mt-4 text-[10px] text-gray-500 border-t border-gray-700 pt-2">
+            <strong>Si ves 'LIMIT 0 (BLOQUEO)':</strong><br/>
+            Google ha restringido la IP de Vercel para este modelo gratuito. El sistema intentará usar Gemini 3 Pro automáticamente.
           </div>
         </div>
       )}
@@ -184,7 +186,7 @@ const App: React.FC = () => {
                       <div className="flex-1">
                         <span className="font-bold block mb-1">Error del Sistema:</span>
                         <span className="opacity-90">{errorMsg}</span>
-                        {errorMsg.includes('429') && (
+                        {errorMsg.includes('saturado') && (
                           <button onClick={() => setShowDiagnostics(true)} className="block mt-2 text-xs underline font-bold">
                             Abrir Diagnóstico de Keys
                           </button>
